@@ -5,6 +5,7 @@ extern crate maplit;
 use std::collections::{BTreeMap,BTreeSet, VecDeque};
 use std::rc::Rc;
 use std::ops::BitOr;
+use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Re {
@@ -33,7 +34,7 @@ let rec null = function
     module I = Set.Make(struct type t = int let compare = compare end)
 */
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RcRe(Rc<Re>);
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Res(BTreeSet<RcRe>);
@@ -151,9 +152,9 @@ impl RcRe {
         let mut state : State = Default::default();
         state.delta.insert(self.clone());
 
-        for _ in 0..15 {
+        loop {
             let mut next : State = Default::default();
-            // println!("S: {:?}", state);
+            println!("S: {:#?}", state);
             next.pd.extend(state.pd.iter().cloned());
             next.pd.extend(state.delta.iter().cloned());
             next.delta = state.delta.iter()
@@ -169,20 +170,27 @@ impl RcRe {
             println!("N@{:16x}: pd: {:?}; delta: {:?}; tau: {:?}",
                     hash(&next), next.pd.len(), next.delta.len(), next.tau.len());
 
-            // if state == next { break; }
+            if state == next { break; }
             state = next;
         }
 
         let idx = state.pd.iter().enumerate().map(|(i, r)| (r.clone(), i)).collect::<BTreeMap<_, _>>();
 
+        let initial = idx[self];
         let mut transitions = btreemap!{};
+        println!("digraph g{{");
+        println!("start -> N{};", initial);
+
         for (p, x, q) in state.tau {
-            println!("{:?}; {:?}; {:?}", idx[&p], x, idx[&q]);
+            println!("N{} -> N{} [label=\"{}\"];", idx[&p], idx[&q], x);
             let pi = idx[&p]; let qi = idx[&q];
             transitions.entry((pi, x)).or_insert_with(|| btreeset!{}).insert(qi);
         }
+        for state in state.pd.iter() {
+            println!("N{}[label=\"{:?}\"];", idx[state], state);
+        }
+        println!("}}");
 
-        let initial = idx[self];
         let finals = state.pd.iter().filter(|p| p.is_null()).map(|p| idx[p]).collect();
 
         NFA { transition: transitions, initial: initial, finals: finals }
@@ -194,6 +202,12 @@ fn hash<T : ::std::hash::Hash>(x: T) -> u64 {
     let mut h = SipHasher::new();
     x.hash(&mut h);
     h.finish()
+}
+
+impl fmt::Debug for RcRe {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "{:?}", *self.0)
+    }
 }
 
 impl std::ops::Mul for RcRe {
@@ -318,4 +332,40 @@ mod tests {
         assert!(!nfa.matches("abaa"));
         assert!(!nfa.matches("aba"));
     }
+
+    #[test]
+    fn should_build_nfa2() {
+        use super::RcRe as R;
+        return;
+        let re = R::star(R::lit('a') * R::lit('b')) * R::lit('c');
+        println!("Re: {:?}", re);
+        let nfa = re.make_nfa();
+        println!("NFA: {:?}", nfa);
+        println!("---");
+        assert!(!nfa.matches("aabbc"));
+        assert!(nfa.matches("abc"));
+        println!("---");
+        assert!(nfa.matches("c"));
+        println!("---");
+        assert!(nfa.matches("ababc"));
+        assert!(!nfa.matches("aba"));
+    }
+    #[test]
+    fn should_build_nfa3() {
+        use super::RcRe as R;
+        let re = R::lit('a') * R::lit('b') * R::lit('c') + 
+                R::lit('e') * R::lit('d') * R::lit('c') ;
+        println!("Re: {:?}", re);
+        let nfa = re.make_nfa();
+        println!("NFA: {:?}", nfa);
+        println!("---");
+        assert!(nfa.matches("abc"));
+        assert!(!nfa.matches("abcd"));
+        assert!(nfa.matches("cba"));
+        assert!(!nfa.matches("dcba"));
+        
+        assert!(false);
+    }
+
+
 }
