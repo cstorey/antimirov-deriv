@@ -241,32 +241,21 @@ pub struct NFA {
 
 impl NFA {
     fn matches(&self, s: &str) -> bool {
-        fn try_match(nfa: &NFA, mut state: usize, mut iter: std::str::Chars, lvl: usize) -> bool {
-            while let Some(c) = iter.next() {
-                let t = nfa.transition.get(&(state, c));
-                print!("{0:1$}", "", lvl);
-                println!("state: {:?}; char: {:?}; t: {:?}", state, c, t);
-                for next in t.into_iter().flat_map(|x| x) {
-                    print!("{0:1$}", "", lvl);
-                    println!("try: {:?}, {:?} -> {:?}", state, c, next);
-                    let matchp = try_match(nfa, *next, iter.clone(), lvl+2);
-                    print!("{0:1$}", "", lvl*2);
-                    println!("matches from: {:?} -> {:?}", next, matchp);
-                    if matchp {
-                        return true
-                    }
-                    print!("{0:1$}", "", lvl); println!("try again: {:?}, {:?}", state, c);
-                }
-                print!("{0:1$}", "", lvl); println!("Out of options!");
-                return false
-            }
-            let matchp = nfa.finals.contains(&state);
-            print!("{0:1$}", "", lvl);
-            println!("END: {:?}, final? {:?}", state, matchp);
-            matchp
-        }
         println!("Matching: {:?} against {:?}", s, self);
-        try_match(self, self.initial, s.chars(), 0)
+        let mut states = btreeset!{self.initial};
+        for c in s.chars() {
+            print!("{:?} @ {:?}", states, c);
+            let next = states.into_iter()
+                .flat_map(|state| self.transition.get(&(state, c))
+                        .into_iter()
+                        .flat_map(|states| states.into_iter()))
+                .cloned()
+                .collect();
+            println!(" -> {:?}", next);
+            states = next;
+        }
+
+        states.into_iter().any(|s| self.finals.contains(&s))
     }
 }
 
@@ -369,8 +358,6 @@ mod tests {
         assert!(!nfa.matches("bc"));
         assert!(!nfa.matches("dc"));
         assert!(!nfa.matches("c"));
-
-        // assert!(false);
     }
     #[test]
     fn should_build_nfa4() {
