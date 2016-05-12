@@ -181,17 +181,27 @@ impl RcRe {
             state = next;
         }
 
-        let idx = state.pd.iter().enumerate().map(|(i, r)| (r.clone(), i)).collect::<BTreeMap<_, _>>();
+        // let idx = state.pd.iter().enumerate().map(|(i, r)| (r.clone(), i)).collect::<BTreeMap<_, _>>();
 
-        let initial = idx[self];
+        // let idx = state.pd.iter().enumerate().map(|(i, r)| (r.clone(), i)).collect::<BTreeMap<_, _>>();
+        let initial = 0;
         let mut transitions = btreemap!{};
 //         println!("digraph g{{");
 //         println!("start -> N{};", initial);
 
+        let mut idx = btreemap!{self.clone() => initial};
+
+        let mut counter = 0;
+
         for (p, x, q) in state.tau {
 //             println!("N{} -> N{} [label=\"{}\"];", idx[&p], idx[&q], x);
-            let pi = idx[&p]; let qi = idx[&q];
-            transitions.entry((pi, x)).or_insert_with(|| btreeset!{}).insert(qi);
+            let pi = *idx.entry(p.clone()).or_insert_with(|| { counter += 1; counter });
+            let qi = *idx.entry(q.clone()).or_insert_with(|| { counter += 1; counter });
+
+            let ent = transitions.entry((pi, x)).or_insert_with(|| vec!{});
+            if !ent.contains(&qi) {
+                ent.push(qi);
+            }
         }
         for state in state.pd.iter() {
 //             println!("N{}[label=\"{:?}\"];", idx[state], state);
@@ -235,24 +245,25 @@ impl std::ops::Add for RcRe {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct NFA {
     initial: usize,
-    transition: BTreeMap<(usize, char), BTreeSet<usize>>,
+    transition: BTreeMap<(usize, char), Vec<usize>>,
     finals: BTreeSet<usize>,
 }
 
 impl NFA {
     pub fn matches(&self, s: &str) -> bool {
 //         // println!("Matching: {:?} against {:?}", s, self);
-        let mut states = btreeset!{self.initial};
+        let mut states = vec![self.initial];
+        let mut next = vec![];
         for c in s.chars() {
-//             // print!("{:?} @ {:?}", states, c);
-            let next = states.into_iter()
+            next.clear();
+            // print!("{:?} @ {:?}", states, c);
+            next.extend(states.iter().cloned()
                 .flat_map(|state| self.transition.get(&(state, c))
                         .into_iter()
                         .flat_map(|states| states.into_iter()))
-                .cloned()
-                .collect();
-//             // println!(" -> {:?}", next);
-            states = next;
+                .cloned());
+            // println!(" -> {:?}", next);
+            std::mem::swap(&mut states, &mut next);
         }
 
         states.into_iter().any(|s| self.finals.contains(&s))
