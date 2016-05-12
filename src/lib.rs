@@ -80,19 +80,19 @@ impl RcRe {
             &Re::Seq(ref l, ref r) => l.is_null() && r.is_null(),
         }
     }
-    fn nil() -> RcRe {
+    pub fn nil() -> RcRe {
         RcRe(Rc::new(Re::Nil))
     }
-    fn lit(c: char) -> RcRe {
+    pub fn lit(c: char) -> RcRe {
         RcRe(Rc::new(Re::Byte(c)))
     }
-    fn seq(l: RcRe, r: RcRe) -> RcRe {
+    pub fn seq(l: RcRe, r: RcRe) -> RcRe {
         RcRe(Rc::new(Re::Seq(l, r)))
     }
-    fn alt(l: RcRe, r: RcRe) -> RcRe {
+    pub fn alt(l: RcRe, r: RcRe) -> RcRe {
         RcRe(Rc::new(Re::Alt(l, r)))
     }
-    fn star(r: RcRe) -> RcRe {
+    pub fn star(r: RcRe) -> RcRe {
         RcRe(Rc::new(Re::Star(r)))
     }
 
@@ -112,7 +112,7 @@ impl RcRe {
     ///
     ///
     pub fn lf(&self) -> BTreeSet<(char, RcRe)> {
-        println!("lf: {:x} <- {:?}; null? {:?}", hash(&self), self, self.is_null());
+//         println!("lf: {:x} <- {:?}; null? {:?}", hash(&self), self, self.is_null());
         let res = match &*self.0 {
             &Re::Nil | &Re::Bot => btreeset!{},
             &Re::Byte(m) => btreeset!{(m, RcRe::nil())},
@@ -123,7 +123,7 @@ impl RcRe {
                 .cloned()
                 .collect()
         };
-        println!("lf: {:x} {:?} -> {:#?}", hash(&self), self, res);
+//         println!("lf: {:x} {:?} -> {:#?}", hash(&self), self, res);
         res
     }
 
@@ -134,7 +134,7 @@ impl RcRe {
             _ => l.clone().into_iter()
                     .map(|(x, ref p)| (x, if p == &Self::nil() { t.clone() } else { Self::seq(p.clone(), t.clone()) })).collect()
         };
-        println!("prod: {:?} {:?} -> {:#?}", l, t, res);
+//         println!("prod: {:?} {:?} -> {:#?}", l, t, res);
         res
     }
 
@@ -160,7 +160,7 @@ impl RcRe {
 
         loop {
             let mut next : State = Default::default();
-            println!("S: {:#?}", state);
+//             println!("S: {:#?}", state);
             next.pd.extend(state.pd.iter().cloned());
             next.pd.extend(state.delta.iter().cloned());
 
@@ -174,8 +174,8 @@ impl RcRe {
                     .flat_map(|p| p.lf().into_iter().map(move |(x, q)| (p.clone(), x, q))))
                     .collect();
 
-            println!("N@{:16x}: pd: {:?}; delta: {:?}; tau: {:?}",
-                    hash(&next), next.pd.len(), next.delta.len(), next.tau.len());
+//             println!("N@{:16x}: pd: {:?}; delta: {:?}; tau: {:?}",
+//                  hash(&next), next.pd.len(), next.delta.len(), next.tau.len());
 
             if state == next { break; }
             state = next;
@@ -185,18 +185,18 @@ impl RcRe {
 
         let initial = idx[self];
         let mut transitions = btreemap!{};
-        println!("digraph g{{");
-        println!("start -> N{};", initial);
+//         println!("digraph g{{");
+//         println!("start -> N{};", initial);
 
         for (p, x, q) in state.tau {
-            println!("N{} -> N{} [label=\"{}\"];", idx[&p], idx[&q], x);
+//             println!("N{} -> N{} [label=\"{}\"];", idx[&p], idx[&q], x);
             let pi = idx[&p]; let qi = idx[&q];
             transitions.entry((pi, x)).or_insert_with(|| btreeset!{}).insert(qi);
         }
         for state in state.pd.iter() {
-            println!("N{}[label=\"{:?}\"];", idx[state], state);
+//             println!("N{}[label=\"{:?}\"];", idx[state], state);
         }
-        println!("}}");
+//         println!("}}");
 
         let finals = state.pd.iter().filter(|p| p.is_null()).map(|p| idx[p]).collect();
 
@@ -240,18 +240,18 @@ pub struct NFA {
 }
 
 impl NFA {
-    fn matches(&self, s: &str) -> bool {
-        println!("Matching: {:?} against {:?}", s, self);
+    pub fn matches(&self, s: &str) -> bool {
+//         // println!("Matching: {:?} against {:?}", s, self);
         let mut states = btreeset!{self.initial};
         for c in s.chars() {
-            print!("{:?} @ {:?}", states, c);
+//             // print!("{:?} @ {:?}", states, c);
             let next = states.into_iter()
                 .flat_map(|state| self.transition.get(&(state, c))
                         .into_iter()
                         .flat_map(|states| states.into_iter()))
                 .cloned()
                 .collect();
-            println!(" -> {:?}", next);
+//             // println!(" -> {:?}", next);
             states = next;
         }
 
@@ -302,13 +302,13 @@ mod tests {
     #[test]
     fn it_works() {
         let re = RcRe::star(RcRe::lit('a'));
-        println!("{:?} -> {:?}", re, re.is_null());
+//         println!("{:?} -> {:?}", re, re.is_null());
         assert!(re.is_null());
         let deriv1 = re.deriv('a');
-        println!("{:?} / {:?} -> {:?}; {:?}", re, "a", deriv1, deriv1.is_null());
+//         println!("{:?} / {:?} -> {:?}; {:?}", re, "a", deriv1, deriv1.is_null());
         assert!(deriv1.is_null());
         let deriv2 = deriv1.deriv('a');
-        println!("{:?} / {:?} -> {:?}; {:?}", re, "aa", deriv2, deriv2.is_null());
+//         println!("{:?} / {:?} -> {:?}; {:?}", re, "aa", deriv2, deriv2.is_null());
         assert!(deriv2.is_null());
     }
 
@@ -317,14 +317,14 @@ mod tests {
         use super::RcRe as R;
         let re = R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
                 R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b');
-        println!("Re: {:?}", re);
+//         println!("Re: {:?}", re);
         let nfa = re.make_nfa();
-        println!("NFA: {:?}", nfa);
-        println!("---");
+//         println!("NFA: {:?}", nfa);
+//         println!("---");
         assert!(nfa.matches("abbb"));
-        println!("---");
+//         println!("---");
         assert!(nfa.matches("abab"));
-        println!("---");
+//         println!("---");
         assert!(!nfa.matches("abaa"));
         assert!(!nfa.matches("aba"));
     }
@@ -333,15 +333,15 @@ mod tests {
     fn should_build_nfa2() {
         use super::RcRe as R;
         let re = R::star(R::lit('a') * R::lit('b')) * R::lit('c');
-        println!("Re: {:?}", re);
+//         println!("Re: {:?}", re);
         let nfa = re.make_nfa();
-        println!("NFA: {:?}", nfa);
-        println!("---");
+//         println!("NFA: {:?}", nfa);
+//         println!("---");
         assert!(!nfa.matches("aabbc"));
         assert!(nfa.matches("abc"));
-        println!("---");
+//         println!("---");
         assert!(nfa.matches("c"));
-        println!("---");
+//         println!("---");
         assert!(nfa.matches("ababc"));
         assert!(!nfa.matches("aba"));
     }
@@ -349,10 +349,10 @@ mod tests {
     fn should_build_nfa3() {
         use super::RcRe as R;
         let re = R::lit('a') * R::lit('b') * R::lit('c') + R::lit('e') * R::lit('d') * R::lit('c') ;
-        println!("Re: {:?}", re);
+//         println!("Re: {:?}", re);
         let nfa = re.make_nfa();
-        println!("NFA: {:?}", nfa);
-        println!("---");
+//         println!("NFA: {:?}", nfa);
+//         println!("---");
         assert!(nfa.matches("abc"));
         assert!(nfa.matches("edc"));
         assert!(!nfa.matches("bc"));
@@ -363,10 +363,10 @@ mod tests {
     fn should_build_nfa4() {
         use super::RcRe as R;
         let re = R::lit('a') * R::lit('e');
-        println!("Re: {:?}", re);
+//         println!("Re: {:?}", re);
         let nfa = re.make_nfa();
-        println!("NFA: {:?}", nfa);
-        println!("---");
+//         println!("NFA: {:?}", nfa);
+//         println!("---");
         assert!(nfa.matches("ae"));
         assert!(!nfa.matches("e"));
         assert!(!nfa.matches("ea"));
