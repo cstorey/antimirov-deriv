@@ -112,24 +112,30 @@ impl RcRe {
     ///
     ///
     pub fn lf(&self) -> BTreeSet<(char, RcRe)> {
-        match &*self.0 {
+        println!("lf: {:x} <- {:?}; null? {:?}", hash(&self), self, self.is_null());
+        let res = match &*self.0 {
             &Re::Nil | &Re::Bot => btreeset!{},
             &Re::Byte(m) => btreeset!{(m, RcRe::nil())},
             &Re::Alt(ref l, ref r) => &l.lf() | &r.lf(),
             &Re::Star(ref r) => Self::prod(r.lf(), self.clone()),
             &Re::Seq(ref l, ref r) => Self::prod(l.lf(), r.clone())
-                .union(&if l.is_null() { btreeset!{} } else { r.lf() })
+                .union(&if !l.is_null() { btreeset!{} } else { r.lf() })
                 .cloned()
                 .collect()
-        }
+        };
+        println!("lf: {:x} {:?} -> {:#?}", hash(&self), self, res);
+        res
     }
+
     fn prod(l: BTreeSet<(char, RcRe)>, t: RcRe) -> BTreeSet<(char, RcRe)> {
-        match &*t.0 {
+        let res = match &*t.0 {
             &Re::Nil => btreeset!{},
-            &Re::Bot => l,
-            _ => l.into_iter()
+            &Re::Bot => l.clone(),
+            _ => l.clone().into_iter()
                     .map(|(x, ref p)| (x, if p == &Self::nil() { t.clone() } else { Self::seq(p.clone(), t.clone()) })).collect()
-        }
+        };
+        println!("prod: {:?} {:?} -> {:#?}", l, t, res);
+        res
     }
 
 
@@ -157,6 +163,7 @@ impl RcRe {
             println!("S: {:#?}", state);
             next.pd.extend(state.pd.iter().cloned());
             next.pd.extend(state.delta.iter().cloned());
+
             next.delta = state.delta.iter()
                 .flat_map(|p| p.lf().into_iter().map(|(x, q)| q))
                 .filter(|q| !next.pd.contains(q))
@@ -336,7 +343,6 @@ mod tests {
     #[test]
     fn should_build_nfa2() {
         use super::RcRe as R;
-        return;
         let re = R::star(R::lit('a') * R::lit('b')) * R::lit('c');
         println!("Re: {:?}", re);
         let nfa = re.make_nfa();
@@ -353,19 +359,31 @@ mod tests {
     #[test]
     fn should_build_nfa3() {
         use super::RcRe as R;
-        let re = R::lit('a') * R::lit('b') * R::lit('c') + 
-                R::lit('e') * R::lit('d') * R::lit('c') ;
+        let re = R::lit('a') * R::lit('b') * R::lit('c') + R::lit('e') * R::lit('d') * R::lit('c') ;
         println!("Re: {:?}", re);
         let nfa = re.make_nfa();
         println!("NFA: {:?}", nfa);
         println!("---");
         assert!(nfa.matches("abc"));
-        assert!(!nfa.matches("abcd"));
-        assert!(nfa.matches("cba"));
-        assert!(!nfa.matches("dcba"));
-        
-        assert!(false);
+        assert!(nfa.matches("edc"));
+        assert!(!nfa.matches("bc"));
+        assert!(!nfa.matches("dc"));
+        assert!(!nfa.matches("c"));
+
+        // assert!(false);
     }
+    #[test]
+    fn should_build_nfa4() {
+        use super::RcRe as R;
+        let re = R::lit('a') * R::lit('e');
+        println!("Re: {:?}", re);
+        let nfa = re.make_nfa();
+        println!("NFA: {:?}", nfa);
+        println!("---");
+        assert!(nfa.matches("ae"));
+        assert!(!nfa.matches("e"));
+        assert!(!nfa.matches("ea"));
 
-
+        // assert!(false);
+    }
 }
