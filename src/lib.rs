@@ -36,40 +36,6 @@ let rec null = function
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RcRe(Rc<Re>);
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Res(BTreeSet<RcRe>);
-// type M<Y> = BTreeMap<R, Y>;
-
-impl Res {
-    fn new() -> Res {
-        Res(BTreeSet::new())
-    }
-
-    fn rmap<F: Fn(&RcRe) -> RcRe>(&self, f: F) -> Res {
-        Res(self.0.iter().map(f).collect())
-    }
-
-    fn deriv(&self, c: char) -> Res {
-        Res(self.0.iter().flat_map(|r| r.deriv(c).0.into_iter()).collect())
-    }
-
-    fn is_null(&self) -> bool {
-        self.0.iter().any(|r| r.is_null())
-    }
-}
-
-impl<'a> BitOr for &'a Res {
-    type Output = Res;
-    fn bitor(self, other:Self) -> Res {
-        Res(&self.0 | &other.0)
-    }
-}
-
-impl From<BTreeSet<RcRe>> for Res {
-    fn from(s: BTreeSet<RcRe>) -> Res {
-        Res(s)
-    }
-}
 
 impl RcRe {
     fn is_null(&self) -> bool {
@@ -94,18 +60,6 @@ impl RcRe {
     }
     pub fn star(r: RcRe) -> RcRe {
         RcRe(Rc::new(Re::Star(r)))
-    }
-
-    pub fn deriv(&self, c:char) -> Res {
-        match &*self.0 {
-            &Re::Byte(m) if c == m => Res(vec![RcRe::nil()].into_iter().collect()),
-            &Re::Byte(_) | &Re::Nil | &Re::Bot => Res::new(),
-            &Re::Alt(ref l, ref r) => &l.deriv(c) | &r.deriv(c),
-            &Re::Seq(ref l, ref r) =>
-                &l.deriv(c).rmap(|l2| RcRe::seq(l2.clone(), r.clone()))
-                | &if l.is_null() { r.deriv(c) } else { Res::new() },
-            &Re::Star(ref r) => r.deriv(c).rmap(|r2| RcRe::seq(r2.clone(), RcRe::star(r.clone()))),
-        }
     }
 
     /// From Antimirov:
@@ -309,20 +263,7 @@ impl DFA{
 
 #[cfg(test)]
 mod tests {
-    use super::{RcRe,Res};
-    #[test]
-    fn it_works() {
-        let re = RcRe::star(RcRe::lit('a'));
-//         println!("{:?} -> {:?}", re, re.is_null());
-        assert!(re.is_null());
-        let deriv1 = re.deriv('a');
-//         println!("{:?} / {:?} -> {:?}; {:?}", re, "a", deriv1, deriv1.is_null());
-        assert!(deriv1.is_null());
-        let deriv2 = deriv1.deriv('a');
-//         println!("{:?} / {:?} -> {:?}; {:?}", re, "aa", deriv2, deriv2.is_null());
-        assert!(deriv2.is_null());
-    }
-
+    use super::RcRe;
     #[test]
     fn should_build_nfa() {
         use super::RcRe as R;
