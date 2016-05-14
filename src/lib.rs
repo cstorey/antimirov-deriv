@@ -213,11 +213,11 @@ impl NFA {
         for c in s.chars() {
             next.clear();
             // print!("{:?} @ {:?}", states, c);
-            next.extend(states.iter()
-                .flat_map(|state| self.transition.get(&(state, c))
-                        .into_iter()
-                        .flat_map(|states| states.into_iter()))
-                );
+            for state in states.iter() {
+                if let Some(ts) = self.transition.get(&(state, c)) {
+                    next.union_with(ts);
+                }
+            }
             // println!(" -> {:?}", next);
             std::mem::swap(&mut states, &mut next);
         }
