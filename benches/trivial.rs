@@ -4,14 +4,14 @@ extern crate antimirov;
 extern crate regex;
 
 mod antimorov {
-    use antimirov::RcRe as R;
+    use antimirov::{NFA, RcRe as R};
     use test;
     #[bench]
     fn non_matching(b: &mut test::Bencher) {
         let re = R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
                  R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b');
 
-        let nfa = re.make_nfa();
+        let nfa = NFA::build(&re);
         let arg = "abba";
         b.bytes = arg.len() as u64;
         assert!(!nfa.matches(&arg));
@@ -23,7 +23,7 @@ mod antimorov {
         let re = R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
                  R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b');
 
-        let nfa = re.make_nfa();
+        let nfa = NFA::build(&re);
         let arg = "abab";
         b.bytes = arg.len() as u64;
         assert!(nfa.matches(&arg));
@@ -32,14 +32,14 @@ mod antimorov {
 }
 
 mod antimorov_rec {
-    use antimirov::RcRe as R;
+    use antimirov::{NFA, RcRe as R};
     use test;
     #[bench]
     fn non_matching(b: &mut test::Bencher) {
         let re = R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
                  R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b');
 
-        let nfa = re.make_nfa();
+        let nfa = NFA::build(&re);
         let arg = "abba";
         b.bytes = arg.len() as u64;
         assert!(!nfa.matches_rec(&arg));
@@ -51,7 +51,7 @@ mod antimorov_rec {
         let re = R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
                  R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b');
 
-        let nfa = re.make_nfa();
+        let nfa = NFA::build(&re);
         let arg = "abab";
         b.bytes = arg.len() as u64;
         assert!(nfa.matches_rec(&arg));

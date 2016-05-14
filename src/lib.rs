@@ -93,79 +93,7 @@ impl RcRe {
     }
 
 
-    /// From Antimirov:
-    ///
-    /// (PD[0], Δ[0], τ[0]) = (∅, {t}, ∅)
-    ///
-    /// PD[i+1] := PD[i] ∪  Δ[i]
-    ///
-    /// Δ[i+1] := ⋃(p∈ Δ[i]) {q | (x, q) ∈ lf(p)∧q ∉ PD[i+1]}
-    /// τ[i+1] := τ[i]∪  {(p, x, q) | p ∈ Δ[i] ∧ (x, q) ∊ lf(p)}
-    ///
-    pub fn make_nfa(&self) -> NFA {
-        #[derive(Debug, Default, PartialEq, Eq, Hash)]
-        struct State {
-            pd: BTreeSet<RcRe>,
-            delta: BTreeSet<RcRe>,
-            tau: BTreeSet<(RcRe, char, RcRe)>,
-        }
-        let mut state : State = Default::default();
-        state.delta.insert(self.clone());
 
-        loop {
-            let mut next : State = Default::default();
-//             println!("S: {:#?}", state);
-            next.pd.extend(state.pd.iter().cloned());
-            next.pd.extend(state.delta.iter().cloned());
-
-            next.delta = state.delta.iter()
-                .flat_map(|p| p.lf().into_iter().map(|(x, q)| q))
-                .filter(|q| !next.pd.contains(q))
-                .collect();
-
-            next.tau = state.tau.iter().cloned().chain(
-                    state.delta.iter()
-                    .flat_map(|p| p.lf().into_iter().map(move |(x, q)| (p.clone(), x, q))))
-                    .collect();
-
-//             println!("N@{:16x}: pd: {:?}; delta: {:?}; tau: {:?}",
-//                  hash(&next), next.pd.len(), next.delta.len(), next.tau.len());
-
-            if state == next { break; }
-            state = next;
-        }
-
-        // let idx = state.pd.iter().enumerate().map(|(i, r)| (r.clone(), i)).collect::<BTreeMap<_, _>>();
-
-        // let idx = state.pd.iter().enumerate().map(|(i, r)| (r.clone(), i)).collect::<BTreeMap<_, _>>();
-        let initial = 0;
-        let mut transitions = btreemap!{};
-//         println!("digraph g{{");
-//         println!("start -> N{};", initial);
-
-        let mut idx = btreemap!{self.clone() => initial};
-
-        let mut counter = 0;
-
-        for (p, x, q) in state.tau {
-//             println!("N{} -> N{} [label=\"{}\"];", idx[&p], idx[&q], x);
-            let pi = *idx.entry(p.clone()).or_insert_with(|| { counter += 1; counter });
-            let qi = *idx.entry(q.clone()).or_insert_with(|| { counter += 1; counter });
-
-            let ent = transitions.entry((pi, x)).or_insert_with(|| vec!{});
-            if !ent.contains(&qi) {
-                ent.push(qi);
-            }
-        }
-        for state in state.pd.iter() {
-//             println!("N{}[label=\"{:?}\"];", idx[state], state);
-        }
-//         println!("}}");
-
-        let finals = state.pd.iter().filter(|p| p.is_null()).map(|p| idx[p]).collect();
-
-        NFA { transition: transitions, initial: initial, finals: finals }
-    }
 }
 
 fn hash<T : ::std::hash::Hash>(x: T) -> u64 {
@@ -204,6 +132,79 @@ pub struct NFA {
 }
 
 impl NFA {
+    /// From Antimirov:
+    ///
+    /// (PD[0], Δ[0], τ[0]) = (∅, {t}, ∅)
+    ///
+    /// PD[i+1] := PD[i] ∪  Δ[i]
+    ///
+    /// Δ[i+1] := ⋃(p∈ Δ[i]) {q | (x, q) ∈ lf(p)∧q ∉ PD[i+1]}
+    /// τ[i+1] := τ[i]∪  {(p, x, q) | p ∈ Δ[i] ∧ (x, q) ∊ lf(p)}
+    ///
+    pub fn build(re: &RcRe) -> NFA {
+        #[derive(Debug, Default, PartialEq, Eq, Hash)]
+        struct State {
+            pd: BTreeSet<RcRe>,
+            delta: BTreeSet<RcRe>,
+            tau: BTreeSet<(RcRe, char, RcRe)>,
+        }
+        let mut state : State = Default::default();
+        state.delta.insert(re.clone());
+
+        loop {
+            let mut next : State = Default::default();
+//             println!("S: {:#?}", state);
+            next.pd.extend(state.pd.iter().cloned());
+            next.pd.extend(state.delta.iter().cloned());
+
+            next.delta = state.delta.iter()
+                .flat_map(|p| p.lf().into_iter().map(|(x, q)| q))
+                .filter(|q| !next.pd.contains(q))
+                .collect();
+
+            next.tau = state.tau.iter().cloned().chain(
+                    state.delta.iter()
+                    .flat_map(|p| p.lf().into_iter().map(move |(x, q)| (p.clone(), x, q))))
+                    .collect();
+
+//             println!("N@{:16x}: pd: {:?}; delta: {:?}; tau: {:?}",
+//                  hash(&next), next.pd.len(), next.delta.len(), next.tau.len());
+
+            if state == next { break; }
+            state = next;
+        }
+
+        // let idx = state.pd.iter().enumerate().map(|(i, r)| (r.clone(), i)).collect::<BTreeMap<_, _>>();
+
+        // let idx = state.pd.iter().enumerate().map(|(i, r)| (r.clone(), i)).collect::<BTreeMap<_, _>>();
+        let initial = 0;
+        let mut transitions = btreemap!{};
+//         println!("digraph g{{");
+//         println!("start -> N{};", initial);
+
+        let mut idx = btreemap!{re.clone() => initial};
+
+        let mut counter = 0;
+
+        for (p, x, q) in state.tau {
+//             println!("N{} -> N{} [label=\"{}\"];", idx[&p], idx[&q], x);
+            let pi = *idx.entry(p.clone()).or_insert_with(|| { counter += 1; counter });
+            let qi = *idx.entry(q.clone()).or_insert_with(|| { counter += 1; counter });
+
+            let ent = transitions.entry((pi, x)).or_insert_with(|| vec!{});
+            if !ent.contains(&qi) {
+                ent.push(qi);
+            }
+        }
+        for state in state.pd.iter() {
+//             println!("N{}[label=\"{:?}\"];", idx[state], state);
+        }
+//         println!("}}");
+
+        let finals = state.pd.iter().filter(|p| p.is_null()).map(|p| idx[p]).collect();
+
+        NFA { transition: transitions, initial: initial, finals: finals }
+    }
     pub fn matches(&self, s: &str) -> bool {
 //         // println!("Matching: {:?} against {:?}", s, self);
         let mut states = vec![self.initial];
@@ -293,14 +294,14 @@ impl DFA{
 
 #[cfg(test)]
 mod tests {
-    use super::RcRe;
+    use super::{RcRe,NFA};
     #[test]
     fn should_build_nfa() {
         use super::RcRe as R;
         let re = R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
                 R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b');
 //         println!("Re: {:?}", re);
-        let nfa = re.make_nfa();
+        let nfa = NFA::build(&re);
 //         println!("NFA: {:?}", nfa);
 //         println!("---");
         assert!(nfa.matches("abbb"));
@@ -316,7 +317,7 @@ mod tests {
         use super::RcRe as R;
         let re = R::star(R::lit('a') * R::lit('b')) * R::lit('c');
 //         println!("Re: {:?}", re);
-        let nfa = re.make_nfa();
+        let nfa = NFA::build(&re);
 //         println!("NFA: {:?}", nfa);
 //         println!("---");
         assert!(!nfa.matches("aabbc"));
@@ -332,7 +333,7 @@ mod tests {
         use super::RcRe as R;
         let re = R::lit('a') * R::lit('b') * R::lit('c') + R::lit('e') * R::lit('d') * R::lit('c') ;
 //         println!("Re: {:?}", re);
-        let nfa = re.make_nfa();
+        let nfa = NFA::build(&re);
 //         println!("NFA: {:?}", nfa);
 //         println!("---");
         assert!(nfa.matches("abc"));
@@ -346,7 +347,7 @@ mod tests {
         use super::RcRe as R;
         let re = R::lit('a') * R::lit('e');
 //         println!("Re: {:?}", re);
-        let nfa = re.make_nfa();
+        let nfa = NFA::build(&re);
 //         println!("NFA: {:?}", nfa);
 //         println!("---");
         assert!(nfa.matches("ae"));
