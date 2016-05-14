@@ -2,7 +2,9 @@
 
 #[macro_use]
 extern crate maplit;
+extern crate bit_set;
 use std::collections::{BTreeMap,BTreeSet, VecDeque};
+use bit_set::BitSet;
 use std::rc::Rc;
 use std::ops::BitOr;
 use std::fmt;
@@ -127,7 +129,7 @@ impl std::ops::Add for RcRe {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct NFA {
     initial: usize,
-    transition: BTreeMap<(usize, char), Vec<usize>>,
+    transition: BTreeMap<(usize, char), BitSet>,
     finals: BTreeSet<usize>,
 }
 
@@ -191,10 +193,8 @@ impl NFA {
             let pi = *idx.entry(p.clone()).or_insert_with(|| { counter += 1; counter });
             let qi = *idx.entry(q.clone()).or_insert_with(|| { counter += 1; counter });
 
-            let ent = transitions.entry((pi, x)).or_insert_with(|| vec!{});
-            if !ent.contains(&qi) {
-                ent.push(qi);
-            }
+            let ent = transitions.entry((pi, x)).or_insert_with(|| BitSet::new());
+            ent.insert(qi);
         }
         for state in state.pd.iter() {
 //             println!("N{}[label=\"{:?}\"];", idx[state], state);
@@ -205,6 +205,7 @@ impl NFA {
 
         NFA { transition: transitions, initial: initial, finals: finals }
     }
+
     pub fn matches(&self, s: &str) -> bool {
 //         // println!("Matching: {:?} against {:?}", s, self);
         let mut states = vec![self.initial];
@@ -234,7 +235,7 @@ impl NFA {
                 for next in t.into_iter().flat_map(|x| x) {
                     // print!("{0:1$}", "", lvl);
                     // println!("try: {:?}, {:?} -> {:?}", state, c, next);
-                    let matchp = try_match(nfa, *next, iter.clone(), lvl+2);
+                    let matchp = try_match(nfa, next, iter.clone(), lvl+2);
                     // print!("{0:1$}", "", lvl*2);
                     // println!("matches from: {:?} -> {:?}", next, matchp);
                     if matchp {
