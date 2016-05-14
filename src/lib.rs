@@ -208,12 +208,12 @@ impl NFA {
 
     pub fn matches(&self, s: &str) -> bool {
 //         // println!("Matching: {:?} against {:?}", s, self);
-        let mut states = vec![self.initial];
-        let mut next = vec![];
+        let mut states = BitSet::new(); states.insert(self.initial);
+        let mut next = BitSet::new();
         for c in s.chars() {
             next.clear();
             // print!("{:?} @ {:?}", states, c);
-            next.extend(states.iter().cloned()
+            next.extend(states.iter()
                 .flat_map(|state| self.transition.get(&(state, c))
                         .into_iter()
                         .flat_map(|states| states.into_iter()))
