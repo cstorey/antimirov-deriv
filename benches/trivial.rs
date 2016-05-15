@@ -9,30 +9,29 @@ fn test_re() -> R {
     R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b')
 }
 
+fn bench_nfa<F: Fn(&NFA, &str) -> bool>(b: &mut test::Bencher,
+        re: R, s: &str, matchp: bool, f: F) {
+    let nfa = NFA::build(&re);
+    let arg = "abba";
+    b.bytes = arg.len() as u64;
+    assert_eq!(f(&nfa, s), matchp);
+    b.iter(|| f(&nfa, s))
+
+}
 
 mod antimorov {
     use antimirov::{NFA, RcRe as R};
     use test;
     #[bench]
     fn non_matching(b: &mut test::Bencher) {
-        let re = super::test_re();
-
-        let nfa = NFA::build(&re);
-        let arg = "abba";
-        b.bytes = arg.len() as u64;
-        assert!(!nfa.matches(&arg));
-        b.iter(|| nfa.matches(&arg))
+        super::bench_nfa(b, super::test_re(), "abba", false,
+                |nfa, arg| nfa.matches(&arg))
     }
 
     #[bench]
     fn matching_ok(b: &mut test::Bencher) {
-        let re = super::test_re();
-
-        let nfa = NFA::build(&re);
-        let arg = "abab";
-        b.bytes = arg.len() as u64;
-        assert!(nfa.matches(&arg));
-        b.iter(|| nfa.matches(&arg))
+        super::bench_nfa(b, super::test_re(), "abab", true,
+                |nfa, arg| nfa.matches(&arg))
     }
 }
 
@@ -41,24 +40,14 @@ mod antimorov_rec {
     use test;
     #[bench]
     fn non_matching(b: &mut test::Bencher) {
-        let re = super::test_re();
-
-        let nfa = NFA::build(&re);
-        let arg = "abba";
-        b.bytes = arg.len() as u64;
-        assert!(!nfa.matches_rec(&arg));
-        b.iter(|| nfa.matches_rec(&arg))
+        super::bench_nfa(b, super::test_re(), "abba", false,
+                |nfa, arg| nfa.matches_rec(&arg))
     }
 
     #[bench]
     fn matching_ok(b: &mut test::Bencher) {
-        let re = super::test_re();
-
-        let nfa = NFA::build(&re);
-        let arg = "abab";
-        b.bytes = arg.len() as u64;
-        assert!(nfa.matches_rec(&arg));
-        b.iter(|| nfa.matches_rec(&arg))
+        super::bench_nfa(b, super::test_re(), "abab", true,
+                |nfa, arg| nfa.matches_rec(&arg))
     }
 }
 
@@ -67,24 +56,14 @@ mod antimorov_bt {
     use test;
     #[bench]
     fn non_matching(b: &mut test::Bencher) {
-        let re = super::test_re();
-
-        let nfa = NFA::build(&re);
-        let arg = "abba";
-        b.bytes = arg.len() as u64;
-        assert!(!nfa.matches_bt(&arg));
-        b.iter(|| nfa.matches_bt(&arg))
+        super::bench_nfa(b, super::test_re(), "abba", false,
+                |nfa, arg| nfa.matches_bt(&arg))
     }
 
     #[bench]
     fn matching_ok(b: &mut test::Bencher) {
-        let re = super::test_re();
-
-        let nfa = NFA::build(&re);
-        let arg = "abab";
-        b.bytes = arg.len() as u64;
-        assert!(nfa.matches_bt(&arg));
-        b.iter(|| nfa.matches_bt(&arg))
+        super::bench_nfa(b, super::test_re(), "abab", true,
+                |nfa, arg| nfa.matches_bt(&arg))
     }
 }
 
