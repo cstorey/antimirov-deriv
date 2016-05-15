@@ -207,18 +207,18 @@ impl NFA {
     }
 
     pub fn matches(&self, s: &str) -> bool {
-//         // println!("Matching: {:?} against {:?}", s, self);
+        println!("Matching: {:?} against {:?}", s, self);
         let mut states = BitSet::new(); states.insert(self.initial);
         let mut next = BitSet::new();
         for c in s.chars() {
             next.clear();
-            // print!("{:?} @ {:?}", states, c);
+            print!("{:?} @ {:?}", states, c);
             for state in states.iter() {
                 if let Some(ts) = self.transition.get(&(state, c)) {
                     next.union_with(ts);
                 }
             }
-            // println!(" -> {:?}", next);
+            println!(" -> {:?}", next);
             std::mem::swap(&mut states, &mut next);
         }
 
@@ -413,6 +413,6 @@ mod tests {
         let nfa = NFA::build(&re);
         println!("NFA: {:#?}", nfa);
         assert!(nfa.matches_bt(&s));
-        assert!(false);
+        // assert!(false);
     }
 }
