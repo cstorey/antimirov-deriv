@@ -257,19 +257,31 @@ impl NFA {
 
     pub fn matches_bt(&self, s: &str) -> bool {
         let mut pending = VecDeque::new();
-        pending.push_back((self.initial, s.chars()));
+        pending.push_back((self.initial, s.chars().enumerate()));
 
-        while let Some((state, mut iter)) = pending.pop_front() {
+        while let Some((mut state, mut input)) = pending.pop_front() {
+            while let Some((i, c)) = input.next() {
+                // println!("{:?}@{:?}", (i ,c), state);
+                if let Some(ts) = self.transition.get(&(state, c)) {
+//                    println!("{:?}@{:?} -> {:?}", (i, c), state, ts);
+                    let mut tsit = ts.into_iter();
+                    if let Some(it) = tsit.next() {
+                        state = it;
+
+                        for t in tsit {
+                            pending.push_back((t, input.clone()));
+                        }
+
+                    }
+                } else {
+//                    println!("{:?}@{:?} -> Empty", (i, c), state);
+                    break;
+                }
+            }
+
+//            println!("EOS: {:?}; endp: {:?}", state, self.finals.contains(&state));
             if self.finals.contains(&state) {
                 return true
-            }
-            if let Some(c) = iter.next() {
-                // println!("{:?}@{:?}", c, state);
-                if let Some(ts) = self.transition.get(&(state, c)) {
-                    for t in ts {
-                        pending.push_back((t, iter.clone()));
-                    }
-                }
             }
         }
         // try_match(self, self.initial, s.chars(), 0)
@@ -340,10 +352,11 @@ mod tests {
         let re = R::star(R::lit('a') * R::lit('b')) * R::lit('c');
 //         println!("Re: {:?}", re);
         let nfa = NFA::build(&re);
-//         println!("NFA: {:?}", nfa);
-//         println!("---");
-        assert!(!nfa.matches("aabbc"));
+         println!("NFA: {:?}", nfa);
+         println!("--- abc");
         assert!(nfa.matches("abc"));
+         println!("--! aabbc");
+        assert!(!nfa.matches("aabbc"));
 //         println!("---");
         assert!(nfa.matches("c"));
 //         println!("---");
