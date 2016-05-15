@@ -254,6 +254,27 @@ impl NFA {
         // println!("Matching: {:?} against {:?}", s, self);
         try_match(self, self.initial, s.chars(), 0)
     }
+
+    pub fn matches_bt(&self, s: &str) -> bool {
+        let mut pending = VecDeque::new();
+        pending.push_back((self.initial, s.chars()));
+
+        while let Some((state, mut iter)) = pending.pop_front() {
+            if self.finals.contains(&state) {
+                return true
+            }
+            if let Some(c) = iter.next() {
+                // println!("{:?}@{:?}", c, state);
+                if let Some(ts) = self.transition.get(&(state, c)) {
+                    for t in ts {
+                        pending.push_back((t, iter.clone()));
+                    }
+                }
+            }
+        }
+        // try_match(self, self.initial, s.chars(), 0)
+        false
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]

@@ -3,13 +3,19 @@ extern crate test;
 extern crate antimirov;
 extern crate regex;
 
+use antimirov::{NFA, RcRe as R};
+fn test_re() -> R {
+    R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
+    R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b')
+}
+
+
 mod antimorov {
     use antimirov::{NFA, RcRe as R};
     use test;
     #[bench]
     fn non_matching(b: &mut test::Bencher) {
-        let re = R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
-                 R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b');
+        let re = super::test_re();
 
         let nfa = NFA::build(&re);
         let arg = "abba";
@@ -20,8 +26,7 @@ mod antimorov {
 
     #[bench]
     fn matching_ok(b: &mut test::Bencher) {
-        let re = R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
-                 R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b');
+        let re = super::test_re();
 
         let nfa = NFA::build(&re);
         let arg = "abab";
@@ -36,8 +41,7 @@ mod antimorov_rec {
     use test;
     #[bench]
     fn non_matching(b: &mut test::Bencher) {
-        let re = R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
-                 R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b');
+        let re = super::test_re();
 
         let nfa = NFA::build(&re);
         let arg = "abba";
@@ -48,8 +52,7 @@ mod antimorov_rec {
 
     #[bench]
     fn matching_ok(b: &mut test::Bencher) {
-        let re = R::lit('a') * R::lit('b') * R::lit('a') * R::lit('b') +
-                 R::lit('a') * R::lit('b') * R::lit('b') * R::lit('b');
+        let re = super::test_re();
 
         let nfa = NFA::build(&re);
         let arg = "abab";
@@ -58,6 +61,33 @@ mod antimorov_rec {
         b.iter(|| nfa.matches_rec(&arg))
     }
 }
+
+mod antimorov_bt {
+    use antimirov::{NFA, RcRe as R};
+    use test;
+    #[bench]
+    fn non_matching(b: &mut test::Bencher) {
+        let re = super::test_re();
+
+        let nfa = NFA::build(&re);
+        let arg = "abba";
+        b.bytes = arg.len() as u64;
+        assert!(!nfa.matches_bt(&arg));
+        b.iter(|| nfa.matches_bt(&arg))
+    }
+
+    #[bench]
+    fn matching_ok(b: &mut test::Bencher) {
+        let re = super::test_re();
+
+        let nfa = NFA::build(&re);
+        let arg = "abab";
+        b.bytes = arg.len() as u64;
+        assert!(nfa.matches_bt(&arg));
+        b.iter(|| nfa.matches_bt(&arg))
+    }
+}
+
 
 mod rust_regex {
     use regex::Regex;
