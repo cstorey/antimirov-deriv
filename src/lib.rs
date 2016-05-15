@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate maplit;
 extern crate bit_set;
+extern crate dot;
 use std::collections::{BTreeMap,BTreeSet, VecDeque, HashMap, HashSet};
 use bit_set::BitSet;
 use std::rc::Rc;
@@ -196,6 +197,7 @@ impl NFA {
             let ent = transitions.entry((pi, x)).or_insert_with(|| BitSet::new());
             ent.insert(qi);
         }
+
         for state in state.pd.iter() {
 //             println!("N{}[label=\"{:?}\"];", idx[state], state);
         }
@@ -287,6 +289,42 @@ impl NFA {
         // try_match(self, self.initial, s.chars(), 0)
         false
     }
+}
+
+type Nd = usize;
+type Ed = (usize, char, usize);
+impl<'a> dot::Labeller<'a, Nd, Ed> for NFA {
+     fn graph_id(&'a self) -> dot::Id<'a> { dot::Id::new("NFA").unwrap() }
+
+     fn node_id(&'a self, n: &Nd) -> dot::Id<'a> {
+         dot::Id::new(format!("N{}", *n)).unwrap()
+     }
+     fn edge_label<'b>(&'b self, ed: &Ed) -> dot::LabelText<'b> {
+         let &(_, c, _) = ed;
+         dot::LabelText::LabelStr(format!("{:?}", c).into())
+     }
+}
+
+use std::borrow::Cow;
+impl<'a> dot::GraphWalk<'a, Nd, Ed> for NFA {
+     fn nodes(&self) -> dot::Nodes<'a,Nd> {
+         let nodes = self.transition.keys()
+             .map(|&(n, _c)| n).chain(self.finals.iter().cloned())
+             .collect::<BTreeSet<_>>();
+
+        let nodes = nodes.into_iter().collect::<Vec<usize>>();
+        Cow::Owned(nodes)
+     }
+
+    fn edges(&'a self) -> dot::Edges<'a,Ed> {
+        let edges = self.transition.iter()
+            .flat_map(|(&(p, c), bs)| bs.iter().map(move |q| (p, c, q)))
+            .collect();
+        Cow::Owned(edges)
+    }
+    fn source(&self, e: &Ed) -> Nd { let &(s,_,_) = e; s }
+
+    fn target(&self, e: &Ed) -> Nd { let &(_,_,t) = e; t }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
@@ -414,5 +452,19 @@ mod tests {
         println!("NFA: {:#?}", nfa);
         assert!(nfa.matches_bt(&s));
         // assert!(false);
+    }
+
+    #[test]
+    fn nfa_size() {
+        use dot;
+        use std::fs::File;
+        for n in 0..24 {
+            println!("a?^{0}a^{0} matches a^{0}", n);
+            let mut f = File::create(&format!("target/pathological-{:04}.dot", n)).expect("open dot file");
+            let (re, s) = pathological(n);
+            let nfa = NFA::build(&re);
+            dot::render(&nfa, &mut f).expect("render dot");
+        }
+        assert!(false);
     }
 }
