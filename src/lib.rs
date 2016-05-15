@@ -144,7 +144,7 @@ impl NFA {
     /// τ[i+1] := τ[i]∪  {(p, x, q) | p ∈ Δ[i] ∧ (x, q) ∊ lf(p)}
     ///
     pub fn build(re: &RcRe) -> NFA {
-        #[derive(Debug, Default, PartialEq, Eq, Hash)]
+        #[derive(Debug, Default, PartialEq, Eq)]
         struct State {
             pd: BTreeSet<RcRe>,
             delta: BTreeSet<RcRe>,
@@ -155,7 +155,7 @@ impl NFA {
 
         loop {
             let mut next : State = Default::default();
-//             println!("S: {:#?}", state);
+//            println!("S: {:#?}", state);
             next.pd.extend(state.pd.iter().cloned());
             next.pd.extend(state.delta.iter().cloned());
 
@@ -261,9 +261,9 @@ impl NFA {
 
         while let Some((mut state, mut input)) = pending.pop_front() {
             while let Some((i, c)) = input.next() {
-                // println!("{:?}@{:?}", (i ,c), state);
+                // print!("{:?}@{:?};", (i ,c), state);
                 if let Some(ts) = self.transition.get(&(state, c)) {
-//                    println!("{:?}@{:?} -> {:?}", (i, c), state, ts);
+                    // print!("{:?}@{:?} -> {:?}; ", (i, c), state, ts);
                     let mut tsit = ts.into_iter();
                     if let Some(it) = tsit.next() {
                         state = it;
@@ -274,12 +274,12 @@ impl NFA {
 
                     }
                 } else {
-//                    println!("{:?}@{:?} -> Empty", (i, c), state);
+                    // println!("{:?}@{:?} -> Empty", (i, c), state);
                     break;
                 }
             }
 
-//            println!("EOS: {:?}; endp: {:?}", state, self.finals.contains(&state));
+            // println!("EOS: {:?}; endp: {:?}", state, self.finals.contains(&state));
             if self.finals.contains(&state) {
                 return true
             }
@@ -390,5 +390,29 @@ mod tests {
         assert!(!nfa.matches("ea"));
 
         // assert!(false);
+    }
+
+    fn pathological(n: usize) -> (RcRe, String) {
+        use super::RcRe as R;
+        use std::iter;
+        // a?^na^n matches a^n:
+        let a = R::lit('a');
+        let a_maybe = a.clone() + R::nil();
+
+        let re =
+            iter::repeat(a_maybe).take(n).fold(R::nil(), |a, b| a * b) *
+            iter::repeat(a).take(n).fold(R::nil(), |a, b| a * b);
+
+        (re, iter::repeat('a').take(n).collect())
+    }
+
+    #[test]
+    fn should_match_pathological_example() {
+        let (re, s) = pathological(8);
+        println!("RE: {:#?}", re);
+        let nfa = NFA::build(&re);
+        println!("NFA: {:#?}", nfa);
+        assert!(nfa.matches_bt(&s));
+        assert!(false);
     }
 }
