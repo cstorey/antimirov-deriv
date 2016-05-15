@@ -14,3 +14,5 @@ regex = "0.1.69"
 
 [profile.release]
 debug = true
+[profile.bench]
+debug = true
