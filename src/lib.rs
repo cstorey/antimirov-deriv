@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate maplit;
 extern crate bit_set;
-use std::collections::{BTreeMap,BTreeSet, VecDeque};
+use std::collections::{BTreeMap,BTreeSet, VecDeque, HashMap, HashSet};
 use bit_set::BitSet;
 use std::rc::Rc;
 use std::ops::BitOr;
@@ -146,9 +146,9 @@ impl NFA {
     pub fn build(re: &RcRe) -> NFA {
         #[derive(Debug, Default, PartialEq, Eq)]
         struct State {
-            pd: BTreeSet<RcRe>,
-            delta: BTreeSet<RcRe>,
-            tau: BTreeSet<(RcRe, char, RcRe)>,
+            pd: HashSet<RcRe>,
+            delta: HashSet<RcRe>,
+            tau: HashSet<(RcRe, char, RcRe)>,
         }
         let mut state : State = Default::default();
         state.delta.insert(re.clone());
