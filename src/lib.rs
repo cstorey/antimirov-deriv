@@ -132,6 +132,7 @@ pub struct NFA {
     initial: usize,
     transition: BTreeMap<(usize, char), BitSet>,
     finals: BTreeSet<usize>,
+    num_states: usize,
 }
 
 impl NFA {
@@ -186,6 +187,7 @@ impl NFA {
 //         println!("start -> N{};", initial);
 
         let mut idx = btreemap!{re.clone() => initial};
+        let num_states = state.pd.len();
 
         let mut counter = 0;
 
@@ -194,33 +196,29 @@ impl NFA {
             let pi = *idx.entry(p.clone()).or_insert_with(|| { counter += 1; counter });
             let qi = *idx.entry(q.clone()).or_insert_with(|| { counter += 1; counter });
 
-            let ent = transitions.entry((pi, x)).or_insert_with(|| BitSet::new());
+            let ent = transitions.entry((pi, x)).or_insert_with(|| BitSet::with_capacity(num_states));
             ent.insert(qi);
         }
 
-        for state in state.pd.iter() {
-//             println!("N{}[label=\"{:?}\"];", idx[state], state);
-        }
-//         println!("}}");
-
         let finals = state.pd.iter().filter(|p| p.is_null()).map(|p| idx[p]).collect();
 
-        NFA { transition: transitions, initial: initial, finals: finals }
+        NFA { transition: transitions, initial: initial, finals: finals, num_states: num_states }
     }
 
     pub fn matches(&self, s: &str) -> bool {
-        println!("Matching: {:?} against {:?}", s, self);
-        let mut states = BitSet::new(); states.insert(self.initial);
-        let mut next = BitSet::new();
+        // println!("Matching: {:?} against {:?}", s, self);
+        let mut states = BitSet::with_capacity(self.num_states);
+        let mut next = BitSet::with_capacity(self.num_states);
+        states.insert(self.initial);
         for c in s.chars() {
             next.clear();
-            print!("{:?} @ {:?}", states, c);
+            // print!("{:?} @ {:?}", states, c);
             for state in states.iter() {
                 if let Some(ts) = self.transition.get(&(state, c)) {
                     next.union_with(ts);
                 }
             }
-            println!(" -> {:?}", next);
+            // println!(" -> {:?}", next);
             std::mem::swap(&mut states, &mut next);
         }
 
@@ -465,6 +463,5 @@ mod tests {
             let nfa = NFA::build(&re);
             dot::render(&nfa, &mut f).expect("render dot");
         }
-        assert!(false);
     }
 }
