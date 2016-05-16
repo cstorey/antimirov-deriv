@@ -214,7 +214,7 @@ impl NFA {
             next.clear();
             // print!("{:?} @ {:?}", states, c);
             for state in states.iter() {
-                if let Some(ts) = self.transition.get(&(state, c)) {
+                if let Some(ts) = self.lookup_transition(state, c) {
                     next.union_with(ts);
                 }
             }
@@ -225,6 +225,9 @@ impl NFA {
         states.into_iter().any(|s| self.finals.contains(&s))
     }
 
+    fn lookup_transition(&self, state: usize, c: char) -> Option<&BitSet> {
+        self.transition.get(&(state, c))
+    }
 
     pub fn matches_rec(&self, s: &str) -> bool {
         fn try_match(nfa: &NFA, mut state: usize, mut iter: std::str::Chars, lvl: usize) -> bool {
