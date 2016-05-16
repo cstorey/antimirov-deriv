@@ -4,11 +4,13 @@
 extern crate maplit;
 extern crate bit_set;
 extern crate dot;
+extern crate vec_map;
 use std::collections::{BTreeMap,BTreeSet, VecDeque, HashMap, HashSet};
 use bit_set::BitSet;
 use std::rc::Rc;
 use std::ops::BitOr;
 use std::fmt;
+use vec_map::VecMap;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Re {
@@ -130,7 +132,7 @@ impl std::ops::Add for RcRe {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct NFA {
     initial: usize,
-    transition: BTreeMap<(usize, char), BitSet>,
+    transition: VecMap<BTreeMap<char, BitSet>>,
     finals: BTreeSet<usize>,
     num_states: usize,
 }
@@ -182,7 +184,7 @@ impl NFA {
 
         // let idx = state.pd.iter().enumerate().map(|(i, r)| (r.clone(), i)).collect::<BTreeMap<_, _>>();
         let initial = 0;
-        let mut transitions = btreemap!{};
+        let mut transitions = VecMap::new();
 //         println!("digraph g{{");
 //         println!("start -> N{};", initial);
 
@@ -196,7 +198,8 @@ impl NFA {
             let pi = *idx.entry(p.clone()).or_insert_with(|| { counter += 1; counter });
             let qi = *idx.entry(q.clone()).or_insert_with(|| { counter += 1; counter });
 
-            let ent = transitions.entry((pi, x)).or_insert_with(|| BitSet::with_capacity(num_states));
+            let ent = transitions.entry(pi).or_insert_with(|| BTreeMap::new())
+                    .entry(x).or_insert_with(|| BitSet::with_capacity(num_states));
             ent.insert(qi);
         }
 
@@ -226,13 +229,13 @@ impl NFA {
     }
 
     fn lookup_transition(&self, state: usize, c: char) -> Option<&BitSet> {
-        self.transition.get(&(state, c))
+        self.transition.get(state).and_then(|chrs| chrs.get(&c))
     }
 
     pub fn matches_rec(&self, s: &str) -> bool {
         fn try_match(nfa: &NFA, mut state: usize, mut iter: std::str::Chars, lvl: usize) -> bool {
             while let Some(c) = iter.next() {
-                let t = nfa.transition.get(&(state, c));
+                let t = nfa.lookup_transition(state, c);
                 // print!("{0:1$}", "", lvl);
                 // println!("state: {:?}; char: {:?}; t: {:?}", state, c, t);
                 for next in t.into_iter().flat_map(|x| x) {
@@ -265,7 +268,7 @@ impl NFA {
         while let Some((mut state, mut input)) = pending.pop_front() {
             while let Some((i, c)) = input.next() {
                 // print!("{:?}@{:?};", (i ,c), state);
-                if let Some(ts) = self.transition.get(&(state, c)) {
+                if let Some(ts) = self.lookup_transition(state, c) {
                     // print!("{:?}@{:?} -> {:?}; ", (i, c), state, ts);
                     let mut tsit = ts.into_iter();
                     if let Some(it) = tsit.next() {
@@ -310,7 +313,7 @@ use std::borrow::Cow;
 impl<'a> dot::GraphWalk<'a, Nd, Ed> for NFA {
      fn nodes(&self) -> dot::Nodes<'a,Nd> {
          let nodes = self.transition.keys()
-             .map(|&(n, _c)| n).chain(self.finals.iter().cloned())
+             .chain(self.finals.iter().cloned())
              .collect::<BTreeSet<_>>();
 
         let nodes = nodes.into_iter().collect::<Vec<usize>>();
@@ -319,7 +322,8 @@ impl<'a> dot::GraphWalk<'a, Nd, Ed> for NFA {
 
     fn edges(&'a self) -> dot::Edges<'a,Ed> {
         let edges = self.transition.iter()
-            .flat_map(|(&(p, c), bs)| bs.iter().map(move |q| (p, c, q)))
+            .flat_map(|(p, charmap)|
+                    charmap.iter().flat_map(move |(&c, bs)| bs.iter().map(move |q| (p, c, q))))
             .collect();
         Cow::Owned(edges)
     }
