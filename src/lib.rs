@@ -18,6 +18,7 @@ pub enum Re {
     Seq (RcRe, RcRe),
     Alt (RcRe, RcRe),
     Star (RcRe),
+    Group (RcRe),
 }
 
 /*
@@ -47,6 +48,7 @@ impl RcRe {
             &Re::Nil | &Re::Star(_) => true,
             &Re::Alt(ref l, ref r) => l.is_null() || r.is_null(),
             &Re::Seq(ref l, ref r) => l.is_null() && r.is_null(),
+            &Re::Group(ref r) => r.is_null(),
         }
     }
     pub fn nil() -> RcRe {
@@ -64,6 +66,9 @@ impl RcRe {
     pub fn star(r: RcRe) -> RcRe {
         RcRe(Rc::new(Re::Star(r)))
     }
+    pub fn group(r: RcRe) -> RcRe {
+        RcRe(Rc::new(Re::Group(r)))
+    }
 
     /// From Antimirov:
     ///
@@ -78,7 +83,9 @@ impl RcRe {
             &Re::Seq(ref l, ref r) => Self::prod(l.lf(), r.clone())
                 .union(&if !l.is_null() { btreeset!{} } else { r.lf() })
                 .cloned()
-                .collect()
+                .collect(),
+            // TODO: Grouping
+            &Re::Group(ref r) => r.lf(),
         };
 //         println!("lf: {:x} {:?} -> {:#?}", hash(&self), self, res);
         res
@@ -94,9 +101,6 @@ impl RcRe {
 //         println!("prod: {:?} {:?} -> {:#?}", l, t, res);
         res
     }
-
-
-
 }
 
 fn hash<T : ::std::hash::Hash>(x: T) -> u64 {
@@ -365,6 +369,24 @@ mod tests {
         // assert!(false);
     }
 
+    #[test]
+    fn should_build_with_groups() {
+        use super::RcRe as R;
+        let re = R::group(R::lit('a') + R::lit('a') * R::lit('b')) *
+            R::group(R::lit('d') + R::lit('d') * R::lit('e'));
+        println!("Re: {:?}", re);
+        let nfa = NFA::build(&re);
+        println!("NFA: {:?}", nfa);
+//         println!("---");
+        assert!(nfa.matches("ad"));
+        assert!(nfa.matches("abde"));
+        assert!(nfa.matches("abd"));
+        assert!(!nfa.matches("abe"));
+        // assert!(false);
+    }
+
+
+
     fn pathological(n: usize) -> (RcRe, String) {
         use super::RcRe as R;
         use std::iter;
@@ -393,7 +415,7 @@ mod tests {
     fn nfa_size() {
         use dot;
         use std::fs::File;
-        for n in 0..24 {
+        for n in 0..8 {
             println!("a?^{0}a^{0} matches a^{0}", n);
             let mut f = File::create(&format!("target/pathological-{:04}.dot", n)).expect("open dot file");
             let (re, s) = pathological(n);
