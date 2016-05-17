@@ -224,69 +224,6 @@ impl NFA {
 
         states.into_iter().any(|s| self.finals.contains(&s))
     }
-
-
-    pub fn matches_rec(&self, s: &str) -> bool {
-        fn try_match(nfa: &NFA, mut state: usize, mut iter: std::str::Chars, lvl: usize) -> bool {
-            while let Some(c) = iter.next() {
-                let t = nfa.transition.get(&(state, c));
-                // print!("{0:1$}", "", lvl);
-                // println!("state: {:?}; char: {:?}; t: {:?}", state, c, t);
-                for next in t.into_iter().flat_map(|x| x) {
-                    // print!("{0:1$}", "", lvl);
-                    // println!("try: {:?}, {:?} -> {:?}", state, c, next);
-                    let matchp = try_match(nfa, next, iter.clone(), lvl+2);
-                    // print!("{0:1$}", "", lvl*2);
-                    // println!("matches from: {:?} -> {:?}", next, matchp);
-                    if matchp {
-                        return true
-                    }
-                    // print!("{0:1$}", "", lvl); println!("try again: {:?}, {:?}", state, c);
-                }
-                // print!("{0:1$}", "", lvl); println!("Out of options!");
-                return false
-            }
-            let matchp = nfa.finals.contains(&state);
-            // print!("{0:1$}", "", lvl);
-            // println!("END: {:?}, final? {:?}", state, matchp);
-            matchp
-        }
-        // println!("Matching: {:?} against {:?}", s, self);
-        try_match(self, self.initial, s.chars(), 0)
-    }
-
-    pub fn matches_bt(&self, s: &str) -> bool {
-        let mut pending = VecDeque::new();
-        pending.push_back((self.initial, s.chars().enumerate()));
-
-        while let Some((mut state, mut input)) = pending.pop_front() {
-            while let Some((i, c)) = input.next() {
-                // print!("{:?}@{:?};", (i ,c), state);
-                if let Some(ts) = self.transition.get(&(state, c)) {
-                    // print!("{:?}@{:?} -> {:?}; ", (i, c), state, ts);
-                    let mut tsit = ts.into_iter();
-                    if let Some(it) = tsit.next() {
-                        state = it;
-
-                        for t in tsit {
-                            pending.push_back((t, input.clone()));
-                        }
-
-                    }
-                } else {
-                    // println!("{:?}@{:?} -> Empty", (i, c), state);
-                    break;
-                }
-            }
-
-            // println!("EOS: {:?}; endp: {:?}", state, self.finals.contains(&state));
-            if self.finals.contains(&state) {
-                return true
-            }
-        }
-        // try_match(self, self.initial, s.chars(), 0)
-        false
-    }
 }
 
 type Nd = usize;
@@ -448,7 +385,7 @@ mod tests {
         println!("RE: {:#?}", re);
         let nfa = NFA::build(&re);
         println!("NFA: {:#?}", nfa);
-        assert!(nfa.matches_bt(&s));
+        assert!(nfa.matches(&s));
         // assert!(false);
     }
 
