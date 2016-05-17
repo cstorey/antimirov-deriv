@@ -5,6 +5,8 @@ extern crate maplit;
 extern crate bit_set;
 extern crate dot;
 use std::collections::{BTreeMap,BTreeSet, VecDeque, HashMap, HashSet};
+use std::iter;
+use std::mem;
 use bit_set::BitSet;
 use std::rc::Rc;
 use std::ops::BitOr;
@@ -40,8 +42,23 @@ let rec null = function
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RcRe(Rc<Re>);
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum Action {
+    Noop,
+    Push,
+    Group(Rc<Action>),
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-pub struct Action;
+pub struct ModelState(Vec<(Action, char)>);
+
+impl ModelState {
+    fn apply(&self, c: char, op: &Action) -> Self {
+        let mut m = self.clone();
+        m.0.push((op.clone(), c));
+        m
+    }
+}
 
 impl RcRe {
     fn is_null(&self) -> bool {
@@ -79,7 +96,7 @@ impl RcRe {
 //         println!("lf: {:x} <- {:?}; null? {:?}", hash(&self), self, self.is_null());
         let res = match &*self.0 {
             &Re::Nil | &Re::Bot => btreeset!{},
-            &Re::Byte(m) => btreeset!{(m, Action, RcRe::nil())},
+            &Re::Byte(m) => btreeset!{(m, Action::Push, RcRe::nil())},
             &Re::Alt(ref l, ref r) => &l.lf() | &r.lf(),
             &Re::Star(ref r) => Self::prod(r.lf(), self.clone()),
             &Re::Seq(ref l, ref r) => Self::prod(l.lf(), r.clone())
@@ -87,7 +104,9 @@ impl RcRe {
                 .cloned()
                 .collect(),
             // TODO: Grouping
-            &Re::Group(ref r) => r.lf(),
+            &Re::Group(ref r) => r.lf().into_iter()
+                .map(|(c, a, re)| (c, Action::Group(Rc::new(a)), re))
+                .collect(),
         };
 //         println!("lf: {:x} {:?} -> {:#?}", hash(&self), self, res);
         res
@@ -214,20 +233,25 @@ impl NFA {
     pub fn matches(&self, s: &str) -> bool {
         self.parses(s).is_some()
     }
-    pub fn parses(&self, s: &str) -> Option<Action> {
-        // println!("Matching: {:?} against {:?}", s, self);
-        let mut states : BTreeSet<(usize, Action)> = BTreeSet::new();
-        let mut next : BTreeSet<(usize, Action)> = BTreeSet::new();
-        states.insert((self.initial, Default::default()));
+
+    pub fn parses(&self, s: &str) -> Option<ModelState> {
+        println!("Matching: {:?} against {:?}", s, self);
+        let mut states = BTreeSet::new();
+        let mut next = BTreeSet::new();
+        states.insert((self.initial, ModelState(vec![])));
         for c in s.chars() {
             next.clear();
-            // print!("{:?} @ {:?}", states, c);
-            for &(state, ref action) in states.iter() {
+            println!("{:?} @ {:?}", states, c);
+            for &(state, ref actions) in states.iter() {
                 if let Some(ts) = self.transition.get(&(state, c)) {
-                    next.extend(ts.iter().cloned());
+                    next.extend(
+                            ts.iter()
+                            .map(|&(ns, ref a2)| {
+                                (ns, actions.apply(c, a2))
+                            }));
                 }
             }
-            // println!(" -> {:?}", next);
+            println!(" -> {:?}", next);
             std::mem::swap(&mut states, &mut next);
         }
 
@@ -384,10 +408,19 @@ mod tests {
         println!("Re: {:?}", re);
         let nfa = NFA::build(&re);
         println!("NFA: {:?}", nfa);
-//         println!("---");
-        assert!(nfa.matches("ad"));
-        assert!(nfa.matches("abde"));
+        println!("--- ad");
+        let ad = nfa.parses("ad");
+        println!("=> {:?}", ad);
+        assert!(ad.is_some());
+
+        println!("--- abde");
+        let abde = nfa.parses("abde");
+        println!("=> {:?}", abde);
+        assert!(abde.is_some());
+
+        println!("--- abd");
         assert!(nfa.matches("abd"));
+        println!("--- abe");
         assert!(!nfa.matches("abe"));
         // assert!(false);
     }
