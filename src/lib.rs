@@ -40,6 +40,8 @@ let rec null = function
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RcRe(Rc<Re>);
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
+pub struct Action;
 
 impl RcRe {
     fn is_null(&self) -> bool {
@@ -73,11 +75,11 @@ impl RcRe {
     /// From Antimirov:
     ///
     ///
-    pub fn lf(&self) -> BTreeSet<(char, RcRe)> {
+    pub fn lf(&self) -> BTreeSet<(char, Action, RcRe)> {
 //         println!("lf: {:x} <- {:?}; null? {:?}", hash(&self), self, self.is_null());
         let res = match &*self.0 {
             &Re::Nil | &Re::Bot => btreeset!{},
-            &Re::Byte(m) => btreeset!{(m, RcRe::nil())},
+            &Re::Byte(m) => btreeset!{(m, Action, RcRe::nil())},
             &Re::Alt(ref l, ref r) => &l.lf() | &r.lf(),
             &Re::Star(ref r) => Self::prod(r.lf(), self.clone()),
             &Re::Seq(ref l, ref r) => Self::prod(l.lf(), r.clone())
@@ -91,12 +93,12 @@ impl RcRe {
         res
     }
 
-    fn prod(l: BTreeSet<(char, RcRe)>, t: RcRe) -> BTreeSet<(char, RcRe)> {
+    fn prod(l: BTreeSet<(char, Action, RcRe)>, t: RcRe) -> BTreeSet<(char, Action, RcRe)> {
         let res = match &*t.0 {
             &Re::Nil => btreeset!{},
             &Re::Bot => l.clone(),
             _ => l.clone().into_iter()
-                    .map(|(x, ref p)| (x, if p == &Self::nil() { t.clone() } else { Self::seq(p.clone(), t.clone()) })).collect()
+                    .map(|(x, ref a, ref p)| (x, a.clone(), if p == &Self::nil() { t.clone() } else { Self::seq(p.clone(), t.clone()) })).collect()
         };
 //         println!("prod: {:?} {:?} -> {:#?}", l, t, res);
         res
@@ -134,7 +136,7 @@ impl std::ops::Add for RcRe {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct NFA {
     initial: usize,
-    transition: BTreeMap<(usize, char), BitSet>,
+    transition: BTreeMap<(usize, char), BTreeSet<(usize, Action)>>,
     finals: BTreeSet<usize>,
     num_states: usize,
 }
@@ -154,7 +156,7 @@ impl NFA {
         struct State {
             pd: HashSet<RcRe>,
             delta: HashSet<RcRe>,
-            tau: HashSet<(RcRe, char, RcRe)>,
+            tau: HashSet<(RcRe, char, RcRe, Action)>,
         }
         let mut state : State = Default::default();
         state.delta.insert(re.clone());
@@ -166,13 +168,13 @@ impl NFA {
             next.pd.extend(state.delta.iter().cloned());
 
             next.delta = state.delta.iter()
-                .flat_map(|p| p.lf().into_iter().map(|(x, q)| q))
+                .flat_map(|p| p.lf().into_iter().map(|(x, a, q)| q))
                 .filter(|q| !next.pd.contains(q))
                 .collect();
 
             next.tau = state.tau.iter().cloned().chain(
                     state.delta.iter()
-                    .flat_map(|p| p.lf().into_iter().map(move |(x, q)| (p.clone(), x, q))))
+                    .flat_map(|p| p.lf().into_iter().map(move |(x, a, q)| (p.clone(), x, q, a))))
                     .collect();
 
 //             println!("N@{:16x}: pd: {:?}; delta: {:?}; tau: {:?}",
@@ -195,13 +197,13 @@ impl NFA {
 
         let mut counter = 0;
 
-        for (p, x, q) in state.tau {
+        for (p, x, q, a) in state.tau {
 //             println!("N{} -> N{} [label=\"{}\"];", idx[&p], idx[&q], x);
             let pi = *idx.entry(p.clone()).or_insert_with(|| { counter += 1; counter });
             let qi = *idx.entry(q.clone()).or_insert_with(|| { counter += 1; counter });
 
-            let ent = transitions.entry((pi, x)).or_insert_with(|| BitSet::with_capacity(num_states));
-            ent.insert(qi);
+            let ent = transitions.entry((pi, x)).or_insert_with(|| btreeset!{});
+            ent.insert((qi, a));
         }
 
         let finals = state.pd.iter().filter(|p| p.is_null()).map(|p| idx[p]).collect();
@@ -210,28 +212,33 @@ impl NFA {
     }
 
     pub fn matches(&self, s: &str) -> bool {
+        self.parses(s).is_some()
+    }
+    pub fn parses(&self, s: &str) -> Option<Action> {
         // println!("Matching: {:?} against {:?}", s, self);
-        let mut states = BitSet::with_capacity(self.num_states);
-        let mut next = BitSet::with_capacity(self.num_states);
-        states.insert(self.initial);
+        let mut states : BTreeSet<(usize, Action)> = BTreeSet::new();
+        let mut next : BTreeSet<(usize, Action)> = BTreeSet::new();
+        states.insert((self.initial, Default::default()));
         for c in s.chars() {
             next.clear();
             // print!("{:?} @ {:?}", states, c);
-            for state in states.iter() {
+            for &(state, ref action) in states.iter() {
                 if let Some(ts) = self.transition.get(&(state, c)) {
-                    next.union_with(ts);
+                    next.extend(ts.iter().cloned());
                 }
             }
             // println!(" -> {:?}", next);
             std::mem::swap(&mut states, &mut next);
         }
 
-        states.into_iter().any(|s| self.finals.contains(&s))
+        states.into_iter()
+            .filter_map(|(s, a)| if self.finals.contains(&s) { Some(a) } else { None })
+            .next()
     }
 }
 
 type Nd = usize;
-type Ed = (usize, char, usize);
+type Ed = (usize, char, usize, Action);
 impl<'a> dot::Labeller<'a, Nd, Ed> for NFA {
      fn graph_id(&'a self) -> dot::Id<'a> { dot::Id::new("NFA").unwrap() }
 
@@ -239,8 +246,8 @@ impl<'a> dot::Labeller<'a, Nd, Ed> for NFA {
          dot::Id::new(format!("N{}", *n)).unwrap()
      }
      fn edge_label<'b>(&'b self, ed: &Ed) -> dot::LabelText<'b> {
-         let &(_, c, _) = ed;
-         dot::LabelText::LabelStr(format!("{:?}", c).into())
+         let &(_, c, _, ref a) = ed;
+         dot::LabelText::LabelStr(format!("{:?} >- {:?}", c, a).into())
      }
 }
 
@@ -257,13 +264,13 @@ impl<'a> dot::GraphWalk<'a, Nd, Ed> for NFA {
 
     fn edges(&'a self) -> dot::Edges<'a,Ed> {
         let edges = self.transition.iter()
-            .flat_map(|(&(p, c), bs)| bs.iter().map(move |q| (p, c, q)))
+            .flat_map(|(&(p, c), bs)| bs.iter().map(move |&(q, ref a)| (p, c, q, a.clone())))
             .collect();
         Cow::Owned(edges)
     }
-    fn source(&self, e: &Ed) -> Nd { let &(s,_,_) = e; s }
+    fn source(&self, e: &Ed) -> Nd { let &(s,_,_,_) = e; s }
 
-    fn target(&self, e: &Ed) -> Nd { let &(_,_,t) = e; t }
+    fn target(&self, e: &Ed) -> Nd { let &(_,_,t,_) = e; t }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
