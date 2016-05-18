@@ -60,6 +60,41 @@ impl ModelState {
     }
 }
 
+pub struct TransitionSet(BTreeSet<(char, Action, RcRe)>);
+
+impl TransitionSet {
+    fn none() -> TransitionSet {
+        TransitionSet(btreeset!{})
+    }
+    fn unit(c: char, a: Action, r: RcRe) -> TransitionSet {
+        TransitionSet(btreeset!{(c, a, r)})
+    }
+    fn union(&self, other: TransitionSet) -> TransitionSet {
+        TransitionSet(&self.0 | &other.0)
+    }
+
+    fn prod(&self, t: RcRe) -> TransitionSet {
+        let res = match &*t.0 {
+            &Re::Nil => btreeset!{},
+            &Re::Bot => self.0.clone(),
+            _ => self.0.iter()
+                    .map(|&(x, ref a, ref p)| {
+                            let derv = if p == &RcRe::nil() { t.clone() } else { RcRe::seq(p.clone(), t.clone()) };
+                            (x, a.clone(), derv)
+                            }).collect()
+        };
+//         println!("prod: {:?} {:?} -> {:#?}", l, t, res);
+        TransitionSet(res)
+    }
+
+    fn map_actions<F: Fn(Action) -> Action>(self, f: F) -> TransitionSet {
+        let ret = self.0.into_iter()
+                        .map(|(c, a, re)| (c, f(a), re))
+                        .collect();
+        TransitionSet(ret)
+    }
+}
+
 impl RcRe {
     fn is_null(&self) -> bool {
         match &*self.0 {
@@ -92,36 +127,23 @@ impl RcRe {
     /// From Antimirov:
     ///
     ///
-    pub fn lf(&self) -> BTreeSet<(char, Action, RcRe)> {
+    pub fn lf(&self) -> TransitionSet {
 //         println!("lf: {:x} <- {:?}; null? {:?}", hash(&self), self, self.is_null());
         let res = match &*self.0 {
-            &Re::Nil | &Re::Bot => btreeset!{},
-            &Re::Byte(m) => btreeset!{(m, Action::Push, RcRe::nil())},
-            &Re::Alt(ref l, ref r) => &l.lf() | &r.lf(),
-            &Re::Star(ref r) => Self::prod(r.lf(), self.clone()),
-            &Re::Seq(ref l, ref r) => Self::prod(l.lf(), r.clone())
-                .union(&if !l.is_null() { btreeset!{} } else { r.lf() })
-                .cloned()
-                .collect(),
+            &Re::Nil | &Re::Bot => TransitionSet::none(),
+            &Re::Byte(m) => TransitionSet::unit(m, Action::Push, RcRe::nil()),
+            &Re::Alt(ref l, ref r) => l.lf().union(r.lf()),
+            &Re::Star(ref r) => r.lf().prod(self.clone()),
+            &Re::Seq(ref l, ref r) => l.lf().prod(r.clone())
+                .union(if !l.is_null() { TransitionSet::none() } else { r.lf() }),
             // TODO: Grouping
-            &Re::Group(ref r) => r.lf().into_iter()
-                .map(|(c, a, re)| (c, Action::Group(Rc::new(a)), re))
-                .collect(),
+            &Re::Group(ref r) => r.lf().map_actions(|a| Action::Group(Rc::new(a))),
         };
 //         println!("lf: {:x} {:?} -> {:#?}", hash(&self), self, res);
         res
     }
 
-    fn prod(l: BTreeSet<(char, Action, RcRe)>, t: RcRe) -> BTreeSet<(char, Action, RcRe)> {
-        let res = match &*t.0 {
-            &Re::Nil => btreeset!{},
-            &Re::Bot => l.clone(),
-            _ => l.clone().into_iter()
-                    .map(|(x, ref a, ref p)| (x, a.clone(), if p == &Self::nil() { t.clone() } else { Self::seq(p.clone(), t.clone()) })).collect()
-        };
-//         println!("prod: {:?} {:?} -> {:#?}", l, t, res);
-        res
-    }
+
 }
 
 fn hash<T : ::std::hash::Hash>(x: T) -> u64 {
@@ -187,13 +209,13 @@ impl NFA {
             next.pd.extend(state.delta.iter().cloned());
 
             next.delta = state.delta.iter()
-                .flat_map(|p| p.lf().into_iter().map(|(x, a, q)| q))
+                .flat_map(|p| p.lf().0.into_iter().map(|(x, a, q)| q))
                 .filter(|q| !next.pd.contains(q))
                 .collect();
 
             next.tau = state.tau.iter().cloned().chain(
                     state.delta.iter()
-                    .flat_map(|p| p.lf().into_iter().map(move |(x, a, q)| (p.clone(), x, q, a))))
+                    .flat_map(|p| p.lf().0.into_iter().map(move |(x, a, q)| (p.clone(), x, q, a))))
                     .collect();
 
 //             println!("N@{:16x}: pd: {:?}; delta: {:?}; tau: {:?}",
@@ -424,8 +446,6 @@ mod tests {
         assert!(!nfa.matches("abe"));
         // assert!(false);
     }
-
-
 
     fn pathological(n: usize) -> (RcRe, String) {
         use super::RcRe as R;
