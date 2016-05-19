@@ -4,3 +4,7 @@
     * Need to explore methods for efficient bit matrix multiplication, Four Russians, &c.
   * Actually understand the Thompson NFA construction.
     * Compare with re2.
+
+# Groups / submatch / actions
+ * Each transition ends up being annotated with a function, which are then composed along the derivattion tree. Perhaps the most "obvious" example is as a set of shift/reduce instructions for a forth-style stack machine.
+ * This looks a lot like Parsing with Derivatives.
