@@ -20,7 +20,7 @@ pub enum Re {
     Seq (RcRe, RcRe),
     Alt (RcRe, RcRe),
     Star (RcRe),
-    Group (RcRe),
+    Group (&'static str, RcRe),
 }
 
 /*
@@ -46,7 +46,7 @@ pub struct RcRe(Rc<Re>);
 pub enum Action {
     Noop,
     Push,
-    Group(Rc<Action>),
+    Group(Rc<Action>, &'static str),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
@@ -102,7 +102,7 @@ impl RcRe {
             &Re::Nil | &Re::Star(_) => true,
             &Re::Alt(ref l, ref r) => l.is_null() || r.is_null(),
             &Re::Seq(ref l, ref r) => l.is_null() && r.is_null(),
-            &Re::Group(ref r) => r.is_null(),
+            &Re::Group(_, ref r) => r.is_null(),
         }
     }
     pub fn nil() -> RcRe {
@@ -120,8 +120,11 @@ impl RcRe {
     pub fn star(r: RcRe) -> RcRe {
         RcRe(Rc::new(Re::Star(r)))
     }
-    pub fn group(r: RcRe) -> RcRe {
-        RcRe(Rc::new(Re::Group(r)))
+    pub fn group(self: RcRe, name: &'static str) -> RcRe {
+        RcRe(Rc::new(Re::Group(name, self)))
+    }
+    pub fn bottom() -> RcRe {
+        RcRe(Rc::new(Re::Bot))
     }
 
     /// From Antimirov:
@@ -137,13 +140,11 @@ impl RcRe {
             &Re::Seq(ref l, ref r) => l.lf().prod(r.clone())
                 .union(if !l.is_null() { TransitionSet::none() } else { r.lf() }),
             // TODO: Grouping
-            &Re::Group(ref r) => r.lf().map_actions(|a| Action::Group(Rc::new(a))),
+            &Re::Group(name, ref r) => r.lf().map_actions(|a| Action::Group(Rc::new(a), name)),
         };
 //         println!("lf: {:x} {:?} -> {:#?}", hash(&self), self, res);
         res
     }
-
-
 }
 
 fn hash<T : ::std::hash::Hash>(x: T) -> u64 {
@@ -425,8 +426,8 @@ mod tests {
     #[test]
     fn should_build_with_groups() {
         use super::RcRe as R;
-        let re = R::group(R::lit('a') + R::lit('a') * R::lit('b')) *
-            R::group(R::lit('d') + R::lit('d') * R::lit('e'));
+        let re = (R::lit('a') + R::lit('a') * R::lit('b')).group("left") *
+            (R::lit('d') + R::lit('d') * R::lit('e')).group("right");
         println!("Re: {:?}", re);
         let nfa = NFA::build(&re);
         println!("NFA: {:?}", nfa);
@@ -483,4 +484,39 @@ mod tests {
             dot::render(&nfa, &mut f).expect("render dot");
         }
     }
+
+    #[test]
+    fn should_parse_arithmetic() {
+        use dot;
+        use std::fs::File;
+        use super::RcRe as R;
+        let digits = (0..10).map(|d| (d + '0' as u8) as char).map(R::lit).fold(R::bottom(), |acc, x| acc + x);
+        let number = (digits.clone() * R::star(digits)).group("number");
+        let products = (number.clone() * R::star(R::lit('*') * number.clone())).group("products");
+        let expr = (products.clone() * R::star(R::lit('+') * products.clone())).group("sums");
+        println!("Re: {:?}", expr);
+        let nfa = NFA::build(&expr);
+        println!("NFA: {:?}", nfa);
+        let mut f = File::create(&"target/arithmetic.dot").expect("open dot file");
+        dot::render(&nfa, &mut f).expect("render dot");
+
+        println!("--- 0");
+        let zero = nfa.parses("0");
+        println!("=> {:?}", zero);
+        assert!(zero.is_some());
+
+        println!("--- 12");
+        let twelve = nfa.parses("12");
+        println!("=> {:?}", twelve);
+        assert!(twelve.is_some());
+
+        println!("--- 12*2+3");
+        let expr = nfa.parses("12*2+3");
+        println!("=> {:?}", expr);
+        assert!(expr.is_some());
+
+
+        // assert!(false);
+    }
+ 
 }
